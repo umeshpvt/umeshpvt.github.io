@@ -1,7 +1,295 @@
-<html>
-    <body>
-        <h1>
-         🖕🏿
-        </h1>
-    </body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPTV Web Player - Multi-Proxy Edition</title>
+    
+    <!-- Video.js CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/video.js/8.10.0/video-js.min.css" rel="stylesheet" />
+    <link href="https://unpkg.com/@videojs/themes@1.0.1/dist/city/index.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent-color: #38bdf8;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            --focus-glow: 0 0 15px rgba(56, 189, 248, 0.8);
+            --error-red: #ef4444;
+            --proxy-active: #f59e0b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 2vh 5vw;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        header { text-align: center; }
+        h1 { font-size: 2.5rem; color: var(--accent-color); margin-bottom: 0.2rem; }
+        .status-bar { font-size: 1.1rem; color: var(--text-dim); margin-bottom: 0.5rem; min-height: 1.5em; }
+
+        .player-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 2px solid #334155;
+        }
+
+        .video-js { width: 100%; height: 100%; }
+
+        .controls-panel {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 12px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.2rem;
+            align-items: end;
+        }
+
+        .control-group { display: flex; flex-direction: column; gap: 0.5rem; }
+        label { font-size: 0.9rem; font-weight: 600; color: var(--text-dim); text-transform: uppercase; }
+
+        select, button, .action-link {
+            background: #0f172a;
+            color: white;
+            border: 2px solid #475569;
+            padding: 0.8rem;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: 100%;
+            outline: none;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        select:focus, button:focus, .action-link:focus {
+            border-color: var(--accent-color);
+            box-shadow: var(--focus-glow);
+            transform: scale(1.02);
+        }
+
+        .btn-primary { background: var(--accent-color); color: #000; font-weight: bold; border: none; }
+        .btn-primary:disabled { background: #475569; opacity: 0.5; }
+
+        .proxy-status {
+            font-size: 0.85rem;
+            color: var(--proxy-active);
+            margin-top: 5px;
+            display: none;
+        }
+
+        .error-message {
+            color: white;
+            background: var(--error-red);
+            padding: 1.2rem;
+            border-radius: 8px;
+            display: none;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 1.8rem; }
+            .controls-panel { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>IPTV Web Player</h1>
+            <div class="status-bar" id="statusBar">Ready. Select a language to begin.</div>
+        </header>
+
+        <div class="player-wrapper" id="playerContainer">
+            <video id="my-video" class="video-js vjs-big-play-centered vjs-theme-city" controls preload="auto">
+                <p class="vjs-no-js">Enable JavaScript to view this video.</p>
+            </video>
+        </div>
+
+        <div id="errorBox" class="error-message"></div>
+
+        <div class="controls-panel">
+            <div class="control-group">
+                <label>1. Language</label>
+                <select id="langSelect">
+                    <option value="" disabled selected>Select Language</option>
+                    <option value="tel">Telugu</option>
+                    <option value="eng">English</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>2. Channel</label>
+                <select id="channelSelect" disabled>
+                    <option value="">Choose a channel...</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>3. Mode</label>
+                <select id="proxyMode">
+                    <option value="direct">Direct Connection (Fastest)</option>
+                    <option value="proxy1">Proxy Service A (CORS.io)</option>
+                    <option value="proxy2">Proxy Service B (AllOrigins)</option>
+                    <option value="proxy3">Proxy Service C (ThingProxy)</option>
+                </select>
+                <div id="proxyHint" class="proxy-status">Active Proxy Engaged</div>
+            </div>
+
+            <div class="control-group">
+                <button id="playBtn" class="btn-primary" disabled>PLAY CHANNEL</button>
+            </div>
+
+            <div class="control-group" id="directLinkGroup" style="display:none;">
+                <a id="directLinkBtn" href="#" target="_blank" class="action-link" style="background:#1e293b; border: 1px dashed #38bdf8;">EXTERNAL PLAYER</a>
+            </div>
+
+            <div class="control-group">
+                <button id="fullscreenBtn" style="background: #475569;">FULLSCREEN</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/video.js/8.10.0/video.min.js"></script>
+
+    <script>
+        const langSelect = document.getElementById('langSelect');
+        const channelSelect = document.getElementById('channelSelect');
+        const proxyMode = document.getElementById('proxyMode');
+        const playBtn = document.getElementById('playBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const directLinkBtn = document.getElementById('directLinkBtn');
+        const directLinkGroup = document.getElementById('directLinkGroup');
+        const statusBar = document.getElementById('statusBar');
+        const errorBox = document.getElementById('errorBox');
+        const proxyHint = document.getElementById('proxyHint');
+
+        const player = videojs('my-video', { fluid: true, playbackRates: [0.5, 1, 1.5, 2] });
+
+        const PROXY_MAP = {
+            proxy1: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+            proxy2: (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+            proxy3: (url) => `https://thingproxy.freeboard.io/fetch/${url}`, // No encode needed for some
+            direct: (url) => url
+        };
+
+        const PLAYLISTS = {
+            tel: 'https://iptv-org.github.io/iptv/languages/tel.m3u',
+            eng: 'https://iptv-org.github.io/iptv/languages/eng.m3u'
+        };
+
+        langSelect.addEventListener('change', async () => {
+            const lang = langSelect.value;
+            showStatus(`Loading channels...`);
+            channelSelect.disabled = true;
+            try {
+                const res = await fetch(PLAYLISTS[lang]);
+                const data = await res.text();
+                const channels = parseM3U(data);
+                populateChannels(channels);
+                showStatus(`Loaded ${channels.length} channels.`);
+            } catch (err) { showError("Failed to load playlist."); }
+        });
+
+        function parseM3U(content) {
+            const lines = content.split('\n');
+            const channels = [];
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].startsWith('#EXTINF:')) {
+                    const name = lines[i].split(',').pop().trim();
+                    const url = lines[i + 1]?.trim();
+                    if (url?.startsWith('http')) channels.push({ name, url });
+                }
+            }
+            return channels.sort((a, b) => a.name.localeCompare(b.name));
+        }
+
+        function populateChannels(channels) {
+            channelSelect.innerHTML = '<option value="" disabled selected>Select a Channel</option>';
+            channels.forEach(ch => {
+                const opt = document.createElement('option');
+                opt.value = ch.url; opt.textContent = ch.name;
+                channelSelect.appendChild(opt);
+            });
+            channelSelect.disabled = false;
+        }
+
+        channelSelect.addEventListener('change', () => {
+            playBtn.disabled = !channelSelect.value;
+            directLinkBtn.href = channelSelect.value;
+            directLinkGroup.style.display = 'block';
+            hideError();
+        });
+
+        playBtn.addEventListener('click', () => {
+            const url = channelSelect.value;
+            const name = channelSelect.options[channelSelect.selectedIndex].text;
+            startStream(url, name);
+        });
+
+        function startStream(url, name) {
+            hideError();
+            showStatus(`Connecting to ${name}...`);
+            
+            const mode = proxyMode.value;
+            const finalUrl = PROXY_MAP[mode](url);
+            proxyHint.style.display = mode !== 'direct' ? 'block' : 'none';
+
+            player.src({ src: finalUrl, type: 'application/x-mpegURL' });
+            
+            player.ready(() => {
+                player.play().then(() => {
+                    showStatus(`Playing: ${name} (${mode})`);
+                }).catch(() => showStatus("Press Play to begin."));
+            });
+        }
+
+        player.on('error', () => {
+            const currentMode = proxyMode.value;
+            let suggestion = "";
+            
+            if (currentMode === 'direct') suggestion = "Try selecting 'Proxy Service A' in the Mode menu.";
+            else if (currentMode === 'proxy1') suggestion = "Proxy A failed. Try 'Proxy Service B'.";
+            else suggestion = "This stream might be offline or highly restricted. Try 'EXTERNAL PLAYER'.";
+
+            showError(`Connection Failed via ${currentMode}. ${suggestion}`);
+        });
+
+        fullscreenBtn.addEventListener('click', () => {
+            player.isFullscreen() ? player.exitFullscreen() : player.requestFullscreen();
+        });
+
+        function showStatus(msg) { statusBar.textContent = msg; }
+        function showError(m) { errorBox.textContent = m; errorBox.style.display = 'block'; }
+        function hideError() { errorBox.style.display = 'none'; }
+    </script>
+</body>
 </html>
